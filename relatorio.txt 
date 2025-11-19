@@ -1,0 +1,18 @@
+1. 
+Após usar gcc -c -o code.o code.s:
+code.s: Assembler messages:
+code.s: Warning: end of file not at end of a line; newline inserted
+
+Após usar objdump -d code.o:
+
+code.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <.text>:
+   0:   55                      push   %rbp
+   1:   48 89 e5                mov    %rsp,%rbp
+   4:   48 83 ec 20             sub    $0x20,%rsp
+   8:   c9                      leave
+   9:   c3                      ret
