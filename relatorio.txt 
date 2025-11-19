@@ -1,18 +1,89 @@
-1. 
-Após usar gcc -c -o code.o code.s:
-code.s: Assembler messages:
-code.s: Warning: end of file not at end of a line; newline inserted
+1. O QUE ESTÁ FUNCIONANDO
+O gerador de código foi implementado completamente, cobrindo todas as especificações da linguagem LBS. Os seguintes pontos estão operacionais:
+- Gerenciamento de memória (Stack Frame): O prólogo e epílogo garantem a alocação de 32 bytes na pilha, respeitando o alinhamento exigido pela arquitetura x64.
+- Operações Aritméticas e Atribuições: Todas as operações matemáticas (+, -, *) funcionam corretamente com registradores e memória.
+- Controle de Fluxo: O comando 'zret' foi implementado usando saltos condicionais (jne) e correção de offset posterior.
+- Chamadas de Função: A instrução 'call' realiza chamadas recursivas e para outras funções utilizando endereçamento relativo, passando argumentos corretamente via registrador %edi.
 
-Após usar objdump -d code.o:
+2. PRINCIPAIS DIFICULDADES ENCONTRADAS
+Durante o desenvolvimento, enfrentei alguns desafios técnicos que exigiram bastante depuração:
 
-code.o:     file format elf64-x86-64
+- Cálculo do Offset no Call (Endereçamento Relativo):
+  A maior dificuldade foi entender como calcular o endereço correto para a instrução 'call'. Inicialmente, o código gerado pulava para endereços errados de memória. Percebi, após analisar o binário com 'objdump', que o salto é calculado a partir do final da instrução 'call'. Tive que ajustar a fórmula para subtrair os 5 bytes da própria instrução (1 byte de opcode + 4 bytes de endereço) para que o destino ficasse correto.
 
+- Lógica do 'zret' (Backpatching):
+  Implementar o retorno condicional foi complexo porque, no momento em que escrevo a instrução de pulo (jne), ainda não sei o tamanho exato das instruções de retorno que virão a seguir. A solução foi implementar uma lógica de "backpatching": escrever um placeholder (0x00) no lugar do offset, gerar o código de retorno, calcular a distância percorrida e, só então, voltar no vetor de código para escrever o valor correto do pulo.
 
-Disassembly of section .text:
+- Parsing e Leitura de Arquivo:
+  A interpretação do arquivo de entrada apresentou problemas com espaços em branco e quebras de linha. O comando 'end', especificamente, causava erros de leitura se o arquivo não terminasse exatamente como o fscanf esperava. Tive que refinar a lógica de leitura para consumir caracteres invisíveis (whitespaces) e garantir que o parser fosse robusto o suficiente para aceitar variações na formatação do código fonte.
 
-0000000000000000 <.text>:
-   0:   55                      push   %rbp
-   1:   48 89 e5                mov    %rsp,%rbp
-   4:   48 83 ec 20             sub    $0x20,%rsp
-   8:   c9                      leave
-   9:   c3                      ret
+3. EXEMPLOS DE TESTES REALIZADOS
+
+Teste 1: Operações Básicas
+Objetivo: Verificar precedência e atribuição simples.
+Arquivo: aritmetica.lbs
+----------------------------------------
+function
+v0 = $10
+v1 = $2
+v0 = v0 * v1
+v0 = v0 + $5
+ret v0
+end
+----------------------------------------
+Resultado esperado: (10 * 2) + 5 = 25
+Resultado obtido: 25 (Sucesso)
+
+Teste 2: Fatorial (Recursão)
+Objetivo: Testar a preservação da pilha em chamadas recursivas.
+Arquivo: fatorial.lbs
+----------------------------------------
+function
+zret p0 $1
+v0 = p0 + $0
+v1 = v0 - $1
+v1 = call 0 v1
+v0 = v0 * v1
+ret v0
+end
+----------------------------------------
+Resultado esperado (entrada 5): 120
+Resultado obtido: 120 (Sucesso)
+
+Teste 3: Sequência de Fibonacci
+Objetivo: Testar múltiplas chamadas recursivas na mesma função.
+Arquivo: fibonacci.lbs
+----------------------------------------
+function
+zret p0 $0
+v0 = p0 - $1
+zret v0 $1
+v0 = p0 - $1
+v1 = p0 - $2
+v0 = call 0 v0
+v1 = call 0 v1
+v0 = v0 + v1
+ret v0
+end
+----------------------------------------
+Resultado esperado (entrada 6): 8 (Sequência: 0, 1, 1, 2, 3, 5, 8...)
+Resultado obtido: 8 (Sucesso)
+
+Teste 4: Valor Absoluto (Negativos)
+Objetivo: Testar manipulação de inteiros com sinal e subtração.
+Arquivo: abs.lbs
+----------------------------------------
+function
+v0 = p0 * p0
+ret v0
+end
+function
+v0 = call 0 p0
+zret v0 $0
+v1 = p0 * $-1
+ret v1
+end
+----------------------------------------
+Nota: Esta função retorna o valor positivo se a entrada for negativa.
+Resultado esperado (entrada -10): 10
+Resultado obtido: 10 (Sucesso)
